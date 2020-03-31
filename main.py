@@ -63,19 +63,18 @@ class CountryData:
         self.data: Dict[date, DataElement] = {}
         self.name = name
 
-    def add(self, time: date, element: DataElement):
+    def add(self, time: date, element: DataElement) -> None:
         """
         Add data for a day.
 
-        :param time:
-        :param element:
-        :return:
+        :param time: day
+        :param element: data values for that day
         """
         if time not in self.data:
             self.data[time] = DataElement()
         self.data[time].add(element)
 
-    def get_last(self):
+    def get_last(self) -> DataElement:
         """
         Get data for the last day.
         """
@@ -107,14 +106,10 @@ class CountryData:
             last_value = value
 
         y_average: List[float] = [0.0] * (len(y_data) - average)
-        # for index in range(len(y_data)):
-        #     start = max(index - SMOOTH, 0)
-        #     stop = min(index + SMOOTH + 1, len(y_data))
-        #     sublist = y_data[start:stop]
-        #     y_average[index] = sum(sublist) / (stop - start)
+
         for index in range(len(y_data) - average):
-            y_average[index] = sum(y_data[index:index + average + 1]) / (
-                    average + 1)
+            y_average[index] = \
+                sum(y_data[index:index + average + 1]) / (average + 1)
 
         return x_data, y_average
 
@@ -125,41 +120,50 @@ class Data:
     """
 
     def __init__(self, directory: str):
+        """
+        :param directory: path to directory with input CSV files
+        """
         self.data: Dict[str, CountryData] = {}
 
         for input_file_name in os.listdir(directory):  # type: str
+            if not input_file_name.endswith(".csv"):
+                continue
+            date_time = datetime.strptime(input_file_name, INPUT_FILE_FORMAT)
             with open(os.path.join(directory, input_file_name)) as input_file:
-                if not input_file_name.endswith(".csv"):
-                    continue
-
-                date_time = datetime.strptime(
-                    input_file_name, INPUT_FILE_FORMAT)
-                reader = csv.reader(input_file, delimiter=",", quotechar='"')
-                header: List[str] = next(reader, None)
-
-                for parts in reader:
-                    dictionary = {}
-                    for index in range(len(header)):  # type: int
-                        dictionary[header[index]] = parts[index]
-                    country: str = find_key(
-                        dictionary,
-                        ["Country/Region", "Country_Region"]).strip()
-                    if country in ALIASES:
-                        country = ALIASES[country]
-                    confirmed: int = int(dictionary["Confirmed"]) if dictionary[
-                        "Confirmed"] else 0
-                    deaths: int = int(dictionary["Deaths"]) if dictionary[
-                        "Deaths"] else 0
-                    recovered: int = int(dictionary["Recovered"]) if dictionary[
-                        "Recovered"] else 0
-                    self.add(country, date_time.date(),
-                             DataElement(confirmed, deaths, recovered))
+                self.process_file(input_file, date_time)
 
         self.add("China", date(2020, 1, 17), DataElement(17, 0, 0))
         self.add("China", date(2020, 1, 18), DataElement(59, 0, 0))
         self.add("China", date(2020, 1, 19), DataElement(77, 0, 0))
         self.add("China", date(2020, 1, 20), DataElement(77, 0, 0))
         self.add("China", date(2020, 1, 21), DataElement(149, 0, 0))
+
+    def process_file(self, input_file, date_time: datetime) -> None:
+        """
+        Load data from file.
+
+        :param input_file: input CSV file
+        :param date_time: date derived from the file name
+        """
+        reader = csv.reader(input_file, delimiter=",", quotechar='"')
+        header: List[str] = next(reader, None)
+
+        for parts in reader:  # type: List[str]
+            dictionary = {}
+            for index, element in enumerate(header):  # type: int, str
+                dictionary[element] = parts[index]
+            country: str = find_key(
+                dictionary, ["Country/Region", "Country_Region"]).strip()
+            country = ALIASES[country] if country in ALIASES else country
+            confirmed: int = \
+                int(dictionary["Confirmed"]) if dictionary["Confirmed"] else 0
+            deaths: int = \
+                int(dictionary["Deaths"]) if dictionary["Deaths"] else 0
+            recovered: int = \
+                int(dictionary["Recovered"]) if dictionary["Recovered"] else 0
+
+            self.add(country, date_time.date(),
+                     DataElement(confirmed, deaths, recovered))
 
     def add(self, country: str, time: date, element: DataElement) -> None:
         """
@@ -187,7 +191,7 @@ def find_key(dictionary: Dict[str, str], keys) -> Optional[str]:
     :param dictionary: input dictionary
     :param keys: keys to try
     """
-    for key in keys:
+    for key in keys:  # type: str
         if key in dictionary:
             return dictionary[key]
 
@@ -218,7 +222,6 @@ class Plotter:
         Plot data.
         """
         plot.figure(figsize=(1000 / 96, 600 / 96))
-        # plot.style.use("ggplot")
 
         for country_data in self.data.get_countries():
             if self.filter_(country_data) \
@@ -232,8 +235,8 @@ class Plotter:
                 x_data, y_data = country_data.get_data(self.average)
                 plot.plot(x_data, y_data, label=country_data.name, linewidth=1)
 
-        x_data, y_data = self.data.data[self.main_country].get_data(
-            self.average)
+        x_data, y_data = \
+            self.data.data[self.main_country].get_data(self.average)
         plot.plot(x_data, y_data, color="#FFFFFF", linewidth=7)
         plot.plot(x_data, y_data, color="#4466CC", linewidth=3,
                   label=self.main_country)
@@ -249,19 +252,19 @@ class Plotter:
         plot.ylabel("Number of confirmed cases per day")
         plot.xlabel("Days since 100th case")
         plot.legend(frameon=False)
-        # plot.show()
         plot.savefig("output.png")
 
 
 if __name__ == "__main__":
 
-    country: str = sys.argv[1]
+    country_argument: str = sys.argv[1]
 
     input_directory: str = "csse_covid_19_data/csse_covid_19_daily_reports"
     if len(sys.argv) > 2:
         input_directory: str = sys.argv[2]
 
-    Plotter(Data(input_directory), main_country=country, is_logarithmic=True,
-            filter_=lambda
-                country_data: country_data.get_last().confirmed < 10900,
-            average=4).draw()
+    Plotter(
+        Data(input_directory), main_country=country_argument,
+        is_logarithmic=True,
+        filter_=lambda country_data: country_data.get_last().confirmed < 10000,
+        average=4).draw()
